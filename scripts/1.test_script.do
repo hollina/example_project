@@ -8,6 +8,8 @@ sysuse auto
 // Summary Statistics
 eststo clear
 		
+		THIS IS A CHANGE. 
+		
 estpost summarize  price mpg foreign headroom trunk weight length turn
 	esttab using "output/summary_statistics.tex" , replace ///
 	cells("mean(fmt(%20.2f) label(\multicolumn{1}{c}{Mean} )) sd(fmt(%20.2f) label(\multicolumn{1}{c}{S.D.}) ) min(fmt(%20.2f) label(\multicolumn{1}{c}{Min.}) ) max(fmt(%20.2f) label(\multicolumn{1}{c}{Max.})) count(fmt(%3.0f) label(\multicolumn{1}{c}{N}))  ") ///
