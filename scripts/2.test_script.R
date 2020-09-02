@@ -17,7 +17,7 @@ data(diamonds)
 
 #########################################################################################################
 # Create a base for the contour plot that shades what would be the "downwind" section
-BasePlot <- ggplot(data = diamond, aes(x = price, y = carat)) + 
+BasePlot <- ggplot(data = diamonds, aes(x = price, y = carat)) + 
   geom_point(size = 3, alpha = .33) +
   theme_classic()
 

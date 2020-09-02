@@ -35,12 +35,6 @@ global slow_code 0
 // Deprecated code, keep this set to 0
 global deprecated 0
 
-// Download packages 
-if $downloads == 1 {
-	// Install  Packages
-	ssc install estout, replace	
-	ssc install blindschemes, replace	
-}
 ///////////////////////////////////////////////////////////////////////////////
 // Use included packages
 
@@ -50,6 +44,15 @@ cap adopath - SITE
 cap adopath - OLDPLACE
 adopath + "stata_packages"
 net set ado "stata_packages"
+
+// Download packages 
+if $downloads == 1 {
+	// Install  Packages
+	ssc install estout, replace	
+	ssc install blindschemes, replace	
+	ssc install coefplot, replace
+}
+
 
 ///////////////////////////////////////////////////////////////////////////////
 // Set your file paths, These are relative to where the project file is saved. 
@@ -110,4 +113,4 @@ do $script_path/1.test_script.do
 * the second part, --vanilla, are the options you want to run with R
 * the third part, <1_scrape_nascar_data_from_racing_reference.R, points to the file we want to run
 * oddly the < "carrot" is necessary and throws an error when it's not there
-shell $r_path --vanilla <scripts/2.test_script
+shell $r_path --vanilla <scripts/2.test_script.R
