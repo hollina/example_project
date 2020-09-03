@@ -3,6 +3,14 @@
 rm(list = ls())
 
 #########################################################################################################
+#  Set CRAN Mirror (place where code will be downloaded from)
+local({
+  r <- getOption("repos")
+  r["CRAN"] <- "https://mirror.las.iastate.edu/CRAN/"
+  options(repos = r)
+})
+
+#########################################################################################################
 #  For this R-Session, change location of R-packages to be custom directory `r_packages`  
 assign(".lib.loc", "r_packages/", envir = environment(.libPaths))
 

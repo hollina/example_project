@@ -2,3 +2,5 @@ stata_packages*ipynb_checkpoints**.gph**.log**.log*.DS**DS_Store.Rhistory
 r_packages
 logs
 .Rproj.user
+.Rhistory
+.Rhistory
