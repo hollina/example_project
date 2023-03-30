@@ -13,7 +13,7 @@ estpost summarize  price mpg foreign headroom trunk weight length turn
 	cells("mean(fmt(%20.2f) label(\multicolumn{1}{c}{Mean} )) sd(fmt(%20.2f) label(\multicolumn{1}{c}{S.D.}) ) min(fmt(%20.2f) label(\multicolumn{1}{c}{Min.}) ) max(fmt(%20.2f) label(\multicolumn{1}{c}{Max.})) count(fmt(%3.0f) label(\multicolumn{1}{c}{N}))  ") ///
 	nomtitle nonum label f alignment(S S) booktabs nomtitles b(%20.2f) se(%20.2f) eqlabels(none) eform  ///
 	noobs substitute(\_ _) ///
-	refcat(unemp_rate "\emph{Mortality Sample}" pop "\hspace{0.5cm} \emph{All}" popw "\hspace{0.5cm} \emph{White}" popb "\hspace{0.5cm} \emph{Black}" poph "\hspace{0.5cm} \emph{Hispanic}" , nolabel) 
+	refcat(foreign "\emph{Mortality Sample}" pop "\hspace{0.5cm} \emph{All}" popw "\hspace{0.5cm} \emph{White}" popb "\hspace{0.5cm} \emph{Black}" poph "\hspace{0.5cm} \emph{Hispanic}" , nolabel) 
 
 /////////////////////////////////////////////////////////////////////////////
 // Regressions
@@ -164,7 +164,6 @@ scatter price weight
 graph export "output/simple_scatter.pdf", replace 
 
 // Coef. Plot of Regressions
-ssc install coefplot 
 coefplot r1 r2 r3 r4, ///
 	drop(_cons) ///
 	yline(0) ciopts(recast(rcap)) ///			
