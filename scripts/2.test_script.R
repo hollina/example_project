@@ -12,12 +12,12 @@ local({
 
 #########################################################################################################
 #  For this R-Session, change location of R-packages to be custom directory `r_packages`  
-assign(".lib.loc", "r_packages/", envir = environment(.libPaths))
+renv::restore()
 
 #########################################################################################################
-#  Load haven (to import data)
+#  Load packages
 if (!require("pacman")) install.packages("pacman")
-pacman::p_load(tidyverse)
+pacman::p_load(renv, tidyverse)
 
 #########################################################################################################
 #  Import
