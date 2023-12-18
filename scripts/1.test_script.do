@@ -8,7 +8,7 @@ sysuse auto
 // Summary Statistics
 eststo clear
 		
-estpost summarize  price mpg foreign headroom trunk weight length turn
+estpost summarize  mpg foreign headroom trunk weight length turn
 	esttab using "output/summary_statistics.tex" , replace ///
 	cells("mean(fmt(%20.2f) label(\multicolumn{1}{c}{Mean} )) sd(fmt(%20.2f) label(\multicolumn{1}{c}{S.D.}) ) min(fmt(%20.2f) label(\multicolumn{1}{c}{Min.}) ) max(fmt(%20.2f) label(\multicolumn{1}{c}{Max.})) count(fmt(%3.0f) label(\multicolumn{1}{c}{N}))  ") ///
 	nomtitle nonum label f alignment(S S) booktabs nomtitles b(%20.2f) se(%20.2f) eqlabels(none) eform  ///

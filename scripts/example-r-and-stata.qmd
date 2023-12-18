@@ -1,0 +1,601 @@
+---
+title: "Stacked DiD, bias, and Wing Weights"
+subtitle: "A side-by-side comparison of R and Stata code to implement stacked did bias correction using wingit weights"
+author: "Coady Wing, Alex Hollingsworth, and Seth Freedman"
+format: 
+  html:
+    self-contained: true
+    toc: true
+    toc-depth: 2
+    toc-location: left
+    toc-title: "Roadmap"
+    theme: lumen
+    css: 'style.css'
+
+---
+
+<style>
+.purple {color: #5601A4;}
+.navy {color: #0D3D56;}
+.ruby {color: #9A2515;}
+.alice {color: #107895;}
+.daisy {color: #EBC944;}
+.coral {color: #F26D21;}
+.kelly {color: #829356;}
+.jet {color: #131516;}
+.asher {color: #555F61;}
+.slate {color: #314F4F;}
+.cranberry {color: #E64173;}
+.cite {color: #107895; font-size: 75%;}
+</style>
+
+```{r, echo=FALSE, message=FALSE}
+# Statamarkdown: https://github.com/hemken/Statamarkdown
+#devtools::install_github("Hemken/Statamarkdown")
+pacman::p_load(Statamarkdown, tidyverse, ggthemes, rio, 
+                geomtextpath, gghighlight, data.table,
+                collapse, fixest, modelsummary)
+
+source("theme_shyam.R")
+
+# Set etable preferences
+
+# The style of the table
+my_style = style.tex("aer", model.format = "(i)")
+
+# markdown = TRUE is only useful in Rmarkdown documents
+setFixest_etable(style.tex = my_style, 
+                 page.width = "a4", 
+                 fitstat = ~ n, 
+                 markdown = TRUE)
+```
+
+Note: Thank you to Shyam Raman for the help getting side-by-side code working and for quarto formatting magic!. 
+
+# Applied example 
+
+## Set-up
+
+The stacked DID estimator we describe in our paper is a straightforward weighted least squares regression. The tricky part is building the stacked data set and using the sample shares to compute the corrective weights. This tutorial provides a walk through using real data. We show you how to construct the stacked data set, compute the weights, and estimate the weighted stacked regression model.
+
+The example we use is a difference in difference analysis of the effects of the ACA Medicaid expansions on uninsurance rates. The basic data source is simply a $state \times year$ panel of uninsurance rates that we constructed using the 2006 to 2021 waves of the American Community Survey. These are public use data downloaded from IPUMS.
+
+
+
+First let's load the dataset
+
+:::{.panel-tabset}
+
+### R
+
+```{r}
+dtc = fread("data/acs1860_unins_2008_2021.csv")
+
+dim(dtc)
+head(dtc)
+```
+
+### Stata
+
+```{stata, collectcode = TRUE}
+import delimited "data/acs1860_unins_2008_2021.csv", clear
+
+li in 1/6
+```
+
+:::
+
+
+In this data set, there is one row for every state year from 2008 to 2021. That's 51 States $\times$ 14 years = 714 total observations. The key outcome variable is `unins` which measures the fraction of people ages 18 to 60 who do not have any form of health insurance in a given state-year cell. The `adopt_year` variable records the year that the state first adopted the ACA Medicaid expansion. States that have not yet adopted the expansion are coded as `NA`.
+
+## Create stacked dataset
+
+Most of this document is designed to go through things slowly to help people understand how the stacked DID comes together. But once you get the hang of it, most of these steps won't really be part of your analysis. You'll just build the stacked data set, compute the weights, and fit the event study regression model. Let's start with that three step procedure. Then we will go back and unpack all of it.
+
+
+We're going to make two functions that help implement the stacked DID estimator: 
+
+1. `create_sub_exp()`: function that creates a sub_experimental data set given a panel data set stored as a data.table object
+
+- inputs: 
+    - `dataset`: underlying panel dataset
+    - `timeID`: variable indicating time
+    - `groupID`: variable indicating group
+    - `adoptionTime`: Adoption time for each unit, Set to `NA` for those that never adopt
+    - `focalAdoptionTime`: The focal adoption time for this sub-unit
+    - `kappa_pre`: pre-treatment periods
+    - `kappa_post`: post-treatment periods 
+- outputs:  A data.table that consists of the treated units that adopt in `timeID` `adoptTime`, the clean controls that adopt no earlier than `adoptTime` + `kappa_post`, and only the calendar time units that fall within $adoptTime - kappa_pre$ and $atime + kappa_post$. 
+
+The idea is that you will apply `create_sub_exp()` for each unique adoption year in the data. Then you'll vertically concatentate (append) these into a stack and then (typically) finalize the stacked data set by removing the sub-experiments that are not feasible to study because of your inclusion criteria. This is a bit of a long-winded way to do this because we are aiming for clairty, rather than efficiency.
+
+
+2. `compute_weights()`: a function that takes a stacked data set and computes the corrective sample weights for the treated and control groups
+
+- inputs: `stack_data`: a stacked dataset (created using `create_sub_exp()`
+- outputs: the original `stack_data`, but with a new column of corrective sample weights `wingweights`
+
+
+Function 1: `create_sub_exp()`
+
+
+:::{.panel-tabset}
+
+### R
+
+```{r}
+create_sub_exp = function(dataset, timeID, groupID, adoptionTime, focalAdoptionTime, kappa_pre, kappa_post){
+  
+  # Copy dataset 
+  dt_temp = copy(dataset)
+
+  # Determine earliest and latest time in the data. 
+		# Used for feasibility check later
+  minTime = dt_temp[, fmin(get(timeID))]
+  maxTime = dt_temp[, fmax(get(timeID))]
+  
+  # Include only the treated groups and the clean controls that adopt at least kappa_post periods after the focal atime.
+  dt_temp = dt_temp[get(adoptionTime) == focalAdoptionTime | get(adoptionTime) > focalAdoptionTime + kappa_post | get(adoptionTime) == TRUE | is.na(get(adoptionTime))]
+  
+  # Limit to time periods inside the event window defined by the kappas
+  dt_temp = dt_temp[get(timeID) %in% (focalAdoptionTime - kappa_pre):(focalAdoptionTime + kappa_post)]
+  
+  # Make treatment group dummy
+  dt_temp[, treat := 0]
+  dt_temp[get(adoptionTime) == focalAdoptionTime, treat := 1] 
+  
+  # Make a post variable
+  dt_temp[, post := fifelse(get(timeID) >= focalAdoptionTime, 1, 0)]
+  
+  # Make event time variable
+  dt_temp[, event_time := get(timeID) - focalAdoptionTime]
+  
+  # Create a feasible variable
+  dt_temp[, feasible := fifelse(focalAdoptionTime - kappa_pre >= minTime & focalAdoptionTime + kappa_post <= maxTime, 1, 0)]
+  
+  # Make a sub experiment ID.
+  dt_temp[, sub_exp := focalAdoptionTime]
+  
+  return(dt_temp)
+} 
+```
+
+### Stata
+
+```{stata, collectcode = TRUE}
+/* Create sub-experiment data for stack */
+
+* clear programs
+capture program drop _all
+
+* start new program
+program create_sub_exp
+syntax, ///
+	timeID(string) ///
+	groupID(string) ///
+	adoptionTime(string) ///
+	focalAdoptionTime(int) ///
+	kappa_pre(numlist) ///
+	kappa_post(numlist)
+	* Suppress output
+	qui{
+		* Save dataset in memory, so we can call this function multiple times. 
+		preserve
+
+		* Determine earliest and latest time in the data. 
+			* Used for feasibility check later
+		sum `timeID'
+		local minTime = r(min)
+		local maxTime = r(max)
+
+		
+		*variable to label sub-experiment if treated in focalAdoptionTime, 
+		gen sub_exp = `focalAdoptionTime' if `adoptionTime' == `focalAdoptionTime'
+		
+		*Now fill in this variable for states with adoptionTime > focalAdoptionTime + kappa_post
+		*note, this will include never treated, because adopt_year is ., which stata counts as infinity
+		replace sub_exp = `focalAdoptionTime' if `adoptionTime' > `focalAdoptionTime' + `kappa_post'
+		
+		*Keep only treated and clean controls
+		keep if sub_exp != .
+		
+		*gen treat variable in subexperiment
+		gen treat = `adoptionTime' == `focalAdoptionTime'
+		
+		*gen event_time and 
+		gen event_time = year - sub_exp
+		
+		*gen post variable
+		gen post = event_time >= 0
+		
+		*trim based on kappa's: -kappa_pre < event_time < kappa_post
+		keep if inrange(event_time, -`kappa_pre', `kappa_post')
+		
+		*keep if event_time >= -`kappa_pre' & event_time <= `kappa_post'
+		gen feasible = 0 
+		replace feasible = 1 if !missing(`adoptionTime')
+		replace feasible = 0 if `adoptionTime' < `minTime' + `kappa_pre' 
+		replace feasible = 0 if `adoptionTime' > `maxTime' - `kappa_post' 
+		drop if `adoptionTime' < `minTime' + `kappa_pre' 
+
+		* Save dataset
+		compress
+		save temp/subexp`focalAdoptionTime', replace
+		restore
+	}
+end
+```
+
+:::
+
+Now we can run each of this functions for the focal year 2014. 
+
+:::{.panel-tabset}
+
+### R
+
+```{r}
+# Run this function with focal year 2014
+subexp2014 = create_sub_exp(
+              dataset = dtc,
+              timeID = "year",
+              groupID = "statefips", 
+              adoptionTime = "adopt_year", 
+              focalAdoptionTime = 2014,
+              kappa_pre = 3,
+              kappa_post = 2)
+
+# Summarize
+datasummary(All(subexp2014) ~ N + Mean + SD + Min + Max,
+            data = subexp2014,
+            output = 'markdown')
+
+```
+
+### Stata
+
+```{stata, collectcode = TRUE}
+* Save dataset
+preserve
+
+* Run this function with focal year 2014
+create_sub_exp, ///
+	timeID(year) ///
+	groupID( statefip) ///
+	adoptionTime(adopt_year) ///
+	focalAdoptionTime(2014) ///
+	kappa_pre(3) ///
+	kappa_post(2)
+
+* Open temp dataset created with function
+use temp/subexp2014.dta, clear
+
+* Summarize
+sum statefip year adopt_year unins  treat  post event_time feasible sub_exp
+
+* Restore dataset
+restore
+```
+
+:::
+
+Next we will run this function for every adoption year of interest in a loop, appending these into one large dataset that we will call `stacked_dtc`.
+
+:::{.panel-tabset}
+
+### R
+
+```{r}
+# create the sub-experimental data sets
+events = dtc[is.na(adopt_year) == FALSE, funique(adopt_year)]
+events
+
+# make a list to store the sub experiments in.
+sub_experiments = list()
+
+# Loop over the events and make a data set for each one
+for (j in events) {
+  sub_name = paste0("sub_",j) 
+  sub_experiments[[sub_name]] = create_sub_exp(
+              dataset = dtc,
+              timeID = "year",
+              groupID = "statefips", 
+              adoptionTime = "adopt_year", 
+              focalAdoptionTime = j,
+              kappa_pre = 3,
+              kappa_post = 2)
+}
+
+# Vertically concatenate the sub-experiments
+stackfull = rbindlist(sub_experiments)
+
+# Remove the sub-experiments that are not feasible
+stacked_dtc = stackfull[feasible == 1]
+
+# Summarize
+datasummary(All(stacked_dtc) ~ N + Mean + SD + Min + Max,
+            data = stacked_dtc,
+            output = 'markdown')
+```
+
+### Stata
+
+```{stata, collectcode = TRUE}
+
+//create the sub-experimental data sets
+
+levelsof adopt_year, local(alist)
+di "`alist'"
+qui{
+// Loop over the events and make a data set for each one
+foreach j of numlist `alist' { 
+  // Preserve dataset
+  preserve
+
+  // run function
+  create_sub_exp, ///
+    timeID(year) ///
+    groupID( statefip) ///
+    adoptionTime(adopt_year) ///
+    focalAdoptionTime(`j') ///
+    kappa_pre(3) ///
+    kappa_post(2)
+
+  // restore dataset
+  restore
+}
+
+// Append the stacks together, but only from feasible stacks
+        * Determine earliest and latest time in the data. 
+            * Used for feasibility check later
+          sum year
+          local minTime = r(min)
+          local maxTime = r(max)
+		  local kappa_pre = 3
+		  local kappa_post= 2
+
+gen feasible_year = adopt_year
+replace feasible_year = . if adopt_year < `minTime' + `kappa_pre' 
+replace feasible_year = . if adopt_year > `maxTime' - `kappa_post' 
+sum feasible_year
+
+local minadopt = r(min)
+levelsof feasible_year, local(alist)
+clear
+foreach j of numlist `alist'  {
+    display `j'
+    if `j' == `minadopt' use temp/subexp`j', clear
+    else append using temp/subexp`j'
+}
+
+// Clean up 
+* erase temp/subexp`j'.dta
+}
+* Summarize
+sum statefip year adopt_year unins  treat  post event_time feasible sub_exp
+
+```
+
+:::
+
+## Create weights
+
+Next we make functions to compute the wing weights. 
+
+:::{.panel-tabset}
+
+### R
+
+```{r}
+compute_weights = function(dataset, treatedVar, eventTimeVar, subexpVar) {
+
+  # Create a copy of the underlying dataset
+  stack_dt_temp = copy(dataset)
+
+  # Step 1: Compute stack - time counts for treated and control
+  stack_dt_temp[, `:=` (stack_n = .N,
+                     stack_treat_n = sum(get(treatedVar)),
+                     stack_control_n = sum(1 - get(treatedVar))), 
+             by = get(eventTimeVar)
+             ]  
+  # Step 2: Compute sub_exp-level counts
+  stack_dt_temp[, `:=` (sub_n = .N,
+                     sub_treat_n = sum(get(treatedVar)),
+                     sub_control_n = sum(1 - get(treatedVar))
+                     ), 
+             by = list(get(subexpVar), get(eventTimeVar))
+             ]
+  
+  # Step 3: Compute sub-experiment share of totals
+  stack_dt_temp[, sub_share := sub_n / stack_n]
+  
+  stack_dt_temp[, `:=` (sub_treat_share = sub_treat_n / stack_treat_n,
+                     sub_control_share = sub_control_n / stack_control_n
+                     )
+             ]
+  
+  # Step 4: Compute weights for treated and control groups
+  stack_dt_temp[get(treatedVar) == 1, wing_weight := 1]
+  stack_dt_temp[get(treatedVar) == 0, wing_weight := sub_treat_share/sub_control_share]
+  
+  return(stack_dt_temp)
+}  
+```
+
+### Stata
+
+```{stata, collectcode = TRUE}
+
+/* Create Wing Weights */
+capture program drop _all
+program compute_weights
+syntax, ///
+	treatedVar(string) ///
+	eventTimeVar(string) ///
+  groupID(string) ///
+	subexpVar(string) 
+
+  // Create weights
+  bysort `subexpVar' `groupID': gen counter_treat = _n if `treatedVar' == 1
+  egen n_treat_tot = total(counter_treat)
+  by `subexpVar': egen n_treat_sub = total(counter_treat) 
+
+  bysort `subexpVar'  `groupID': gen counter_control = _n if `treatedVar' == 0
+  egen n_control_tot = total(counter_control)
+  by `subexpVar': egen n_control_sub = total(counter_control) 
+
+
+  gen wing_weight = 1 if `treatedVar' == 1
+  replace wing_weight = (n_treat_sub/n_treat_tot)/(n_control_sub/n_control_tot) if `treatedVar' == 0
+end
+```
+
+:::
+
+Now we calculate the wing weights. 
+
+:::{.panel-tabset}
+
+### R
+
+```{r}
+stacked_dtc2 = compute_weights(
+      dataset = stacked_dtc,
+      treatedVar = "treat",
+      eventTimeVar = "event_time",
+      subexpVar = "sub_exp")
+
+# Summarize
+datasummary(All(stacked_dtc2) ~ N + Mean + SD + Min + Max,
+            data = stacked_dtc2,
+            output = 'markdown')
+```
+
+### Stata
+
+```{stata, collectcode = TRUE}
+compute_weights, ///
+	treatedVar(treat) ///
+	eventTimeVar(event_time) ///
+  groupID(statefip) ///
+	subexpVar(sub_exp) 
+
+* Summarize 
+sum 
+```
+
+:::
+
+# Run analysis
+
+## Event-studies
+
+:::{.panel-tabset}
+
+### R
+
+```{r} 
+# Fit the event study model, using the weights, clustering at the state level.
+weight_stack = feols(unins ~ i(event_time, treat, ref = -1) | treat + event_time, 
+                              data = stacked_dtc2, 
+                              cluster = stacked_dtc2$statefip,
+                              weights = stacked_dtc2$wing_weight)
+```
+
+
+
+### Stata 
+
+```{stata, collectcode = TRUE}
+
+// Create dummy variables for event-time
+char event_time[omit] -1
+xi i.event_time
+
+// Run regression
+qui reghdfe unins i.treat##i._I* [aw = wing_weight], cluster(statefip) absorb(treat event_time)
+est sto weight_stack
+
+```
+
+:::
+
+Show the results 
+
+:::{.panel-tabset}
+
+### R
+
+```{r, results = 'asis'}
+# display results
+etable(weight_stack)
+
+```
+
+### Stata
+
+```{stata, collectcode = TRUE}
+// Show results
+esttab weight_stack, keep(1.treat#1*) se
+```
+
+:::
+
+## ATT 
+
+
+Make new variable that collapses post and pre periods to get ATT
+
+:::{.panel-tabset}
+
+### R
+
+```{r}
+stacked_dtc2[,post_collapse_event_time := ifelse(event_time >= 0 , 1, event_time)]
+stacked_dtc2[,pre_post_collapse_event_time := ifelse(post_collapse_event_time <= -1 , -1, post_collapse_event_time)]
+```
+
+### Stata
+
+```{stata, collectcode = TRUE}
+gen post_collapse_event_time = event_time
+replace post_collapse_event_time = 1 if event_time >= 0
+
+gen pre_post_collapse_event_time = post_collapse_event_time
+replace pre_post_collapse_event_time = -1 if pre_post_collapse_event_time <= -1
+
+// Create dummy variables for pre vs post
+char pre_post_collapse_event_time[omit] -1
+xi i.pre_post_collapse_event_time, pref(_T)
+
+```
+
+:::
+
+Compute and show ATT
+
+
+
+:::{.panel-tabset}
+
+### R
+
+```{r, results = 'asis'}
+
+stacked_att_w = feols(unins ~ i(pre_post_collapse_event_time, treat, ref = -1) | treat + pre_post_collapse_event_time, 
+                              data = stacked_dtc2, 
+                              cluster = stacked_dtc2$statefip,
+                              weights = stacked_dtc2$wing_weight)
+etable(stacked_att_w)
+```
+
+### Stata
+
+```{stata, collectcode = TRUE}
+qui reghdfe unins i.treat##i._T* [aw = wing_weight], cluster(statefip) absorb(treat pre_post_collapse_event_time)
+est sto weight_stack_att
+
+esttab weight_stack_att, keep(1.treat#1*) se
+```
+
+:::
