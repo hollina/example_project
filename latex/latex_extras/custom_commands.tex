@@ -3,7 +3,6 @@
 \newcommand\iid{i.i.d.} %Makes iid a command
 \newcommand\pN{\mathcal{N}} %Makes the natural numbers a command
 
-
 \setcounter{MaxMatrixCols}{20}
 
 \newtheorem{theorem}{Theorem}%[section]
@@ -14,16 +13,35 @@
 \newenvironment{proof}{\paragraph{Proof:}}{\hfill$\square$ \\} %This fixes the problem with dynamic tables for some reason
 
 %For Page Numbers while rotated
-\newlength{\hfoot}
-\newlength{\vfoot}
-\AddEverypageHook{\ifdim\textwidth=\linewidth\relax
-\else\setlength{\hfoot}{-\topmargin}%
-\addtolength{\hfoot}{-\headheight}%
-\addtolength{\hfoot}{-\headsep}%
-\addtolength{\hfoot}{-.5\linewidth}%
-\ifodd\value{page}\setlength{\vfoot}{\oddsidemargin}%
-\else\setlength{\vfoot}{\evensidemargin}\fi%
-\addtolength{\vfoot}{\textheight}%
-\addtolength{\vfoot}{\footskip}%
-\raisebox{\hfoot}[0pt][0pt]{\rlap{\hspace{\vfoot}\rotatebox[origin=cB]{90}{\thepage}}}\fi}
+%\newlength{\hfoot}
+%\newlength{\vfoot}
+%\AddEverypageHook{\ifdim\textwidth=\linewidth\relax
+%\else\setlength{\hfoot}{-\topmargin}%
+%\addtolength{\hfoot}{-\headheight}%
+%\addtolength{\hfoot}{-\headsep}%
+%\addtolength{\hfoot}{-.5\linewidth}%
+%\ifodd\value{page}\setlength{\vfoot}{\oddsidemargin}%
+%\else\setlength{\vfoot}{\evensidemargin}\fi%
+%\addtolength{\vfoot}{\textheight}%
+%\addtolength{\vfoot}{\footskip}%
+%\raisebox{\hfoot}[0pt][0pt]{\rlap{\hspace{\vfoot}\rotatebox[origin=cB]{90}{\thepage}}}\fi}
 %http://tex.stackexchange.com/questions/209685/landscape-mode-and-page-numbering
+
+%For figure notes
+\newcommand{\Ftext}[1]{%
+    \begin{minipage}[b]{1.0\linewidth}
+        \vspace{2mm}
+        \begin{flushleft}
+            \subcaption*{#1}
+        \end{flushleft}
+    \end{minipage}
+ }
+\newcommand{\Fnote}[1]{\Ftext{\text{Notes:~}~#1}}
+\newcommand{\FnoteScript}[1]{\Ftext{\text{\scriptsize{Notes:}~}~#1}}
+\newcommand{\FnoteFoot}[1]{\Ftext{\text{\footnotesize{Notes:}~}~#1}}
+
+%Math
+\newcommand{\ev}[1]{\mathop{\mathbb E\,} \left[#1\right]}
+\newcommand{\indep}{\perp \!\!\! \perp}
+\newcommand{\var}{\operatorname{var}}
+\newcommand{\cov}{\operatorname{cov}}

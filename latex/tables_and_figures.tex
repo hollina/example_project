@@ -3,23 +3,20 @@
 %------------------------------------------%
 %                Packages 
 %------------------------------------------%
-\include{latex_extras/packages}
+\input{latex_extras/packages}
 %------------------------------------------%
 %              Custom Commands 
 %------------------------------------------%
-\include{latex_extras/custom_commands}
+\input{latex_extras/custom_commands}
 
 %------------------------------------------%
 %      Matter Related to Table Creation 
 %------------------------------------------%
-\include{latex_extras/dynamic_tables}
-%------------------------------------------%
-%     Hyper Ref 
-%------------------------------------------%
-\usepackage[colorlinks,linkcolor=black,citecolor=black,urlcolor=black,hyperfootnotes=false]{hyperref} %hyperef does not work with beamer (as far as I know) so comment this out if you are using it. Also leave the hyperfootnotes as false as when they are true they oddly clash with the caption or subcaption package (i think it's this one at least)
+\input{latex_extras/dynamic_tables}
 
 \doublespacing
  \begin{document}
+
 %------------------------------------------%
 %                Table of Contents
 %------------------------------------------%

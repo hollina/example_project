@@ -5,15 +5,23 @@
 % *****************************************************************
 % Estout related things
 % *****************************************************************
-\let\estinput=\input % define a new input command so that we can still flatten the document
+
+% Added due to changes in TexLive 2022 breaking code
+%https://www.overleaf.com/blog/tex-live-2022-now-available
+%https://tex.stackexchange.com/questions/567985/problems-with-inputtable-tex-hline-after-2020-fall-latex-release
+\makeatletter
+%%primitive input in tabular
+\AddToHook{env/tabular/begin}{\let\estinput=\@@input}
+\makeatother
+%\let\estinput=\@@input % define a new input command so that we can still flatten the document
 
 \newcommand{\estwide}[3]{
-    \vspace{.75ex}{
+    \vspace{.25ex}{
       \textsymbols% Note the added command here
       \begin{tabular*}
       {\textwidth}{@{\hskip\tabcolsep\extracolsep\fill}l*{#2}{#3}}
       \toprule
-      \estinput{#1}
+      \estinput #1 
       \bottomrule
       \addlinespace[.75ex]
       \end{tabular*}
@@ -21,11 +29,11 @@
     } 
 
 \newcommand{\estauto}[3]{
-    \vspace{.75ex}{
+    \vspace{.25ex}{
       \textsymbols% Note the added command here
       \begin{tabular}{l*{#2}{#3}}
       \toprule
-      \estinput{#1}
+      \estinput #1 
       \bottomrule
       \addlinespace[.75ex]
       \end{tabular}
@@ -44,14 +52,14 @@
 % The new approach using threeparttables to generate notes that are the exact width of the table.
 \newcommand{\Figtext}[1]{%
   \begin{tablenotes}[para,flushleft]
-  \hspace{6pt}
-  \hangindent=1.75em
+  %\hspace{6pt}
+  %\hangindent=1.75em
   #1
   \end{tablenotes}
   }
-\newcommand{\Fignote}[1]{\Figtext{\emph{Note:~}~#1}}
-\newcommand{\Figsource}[1]{\Figtext{\emph{Source:~}~#1}}
-\newcommand{\Starnote}{\Figtext{* p $<$ 0.1, ** p $<$ 0.05, *** p $<$ 0.01. Robust standard errors in parentheses.}}% Add significance note with \starnote
+\newcommand{\Fignote}[1]{\Figtext{\text{Notes:~}~#1}}
+\newcommand{\Figsource}[1]{\Figtext{\text{Source:~}~#1}}
+\newcommand{\Starnote}{\Figtext{Point estimates marked ***, **, and * are statistically significant at the 1, 5, and 10 percent levels, respectively.}}% Add significance note with \starnote
 % If you are using hyper-ref (recommended), this command must go after all 
 % other package inclusions (from the hyperref package documentation).
 % The purpose of hyperref is to make the PDF created extensively
